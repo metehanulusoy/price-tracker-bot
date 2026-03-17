@@ -5,5 +5,7 @@ webdriver-manager
 python-dotenv
 schedule
 fake-useragent
+playwright
+streamlit
 plotly
 pandas
