@@ -1,0 +1,9 @@
+requests
+beautifulsoup4
+selenium
+webdriver-manager
+python-dotenv
+schedule
+fake-useragent
+plotly
+pandas
