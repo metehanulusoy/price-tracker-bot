@@ -2,13 +2,14 @@
 
 Track product prices from Trendyol and Amazon. Get Telegram notifications when prices drop.
 
-## 🚀 Features
+## ✨ Features
 
 - 🛍️ Track products from Trendyol and Amazon
 - 📉 Get Telegram notifications when prices drop
 - 🎯 Set target prices and get alerted
 - 📈 View price history charts
-- 👤 Personal tracking — each user sees only their own products
+- 👤 Personal tracking per user
+- 💾 Persistent storage with Supabase
 
 ## 📱 How to Use
 
@@ -26,6 +27,7 @@ Track product prices from Trendyol and Amazon. Get Telegram notifications when p
 - Streamlit (UI)
 - Plotly (charts)
 - Telegram Bot API
+- Supabase (database)
 
 ## ⚙️ Setup
 
@@ -38,7 +40,8 @@ Create `.env` file:
 
 ```
 TELEGRAM_TOKEN=your_bot_token
-TELEGRAM_CHAT_ID=your_chat_id
+SUPABASE_URL=your_supabase_url
+SUPABASE_KEY=your_supabase_key
 ```
 
 Run the app:
@@ -47,7 +50,7 @@ Run the app:
 streamlit run app.py
 ```
 
-Run the bot:
+Run the Telegram bot:
 
 ```bash
 python3 bot.py

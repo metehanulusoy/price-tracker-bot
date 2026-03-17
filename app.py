@@ -2,17 +2,19 @@ import plotly.express as px
 import pandas as pd
 from datetime import datetime
 import streamlit as st
-import json
 import os
 from dotenv import load_dotenv
 from scrapers import get_price
 import requests
+from supabase import create_client
 
 load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-DATA_FILE = "products.json"
-HISTORY_FILE = "price_history.json"
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 st.set_page_config(
     page_title="Price Tracker",
@@ -24,50 +26,40 @@ def send_telegram(chat_id, message):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     requests.post(url, data={"chat_id": chat_id, "text": message, "parse_mode": "HTML"})
 
-def load_all_products():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r") as f:
-            return json.load(f)
-    return {}
-
-def save_all_products(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-
 def get_user_products(chat_id):
-    all_data = load_all_products()
-    return all_data.get(str(chat_id), [])
+    result = supabase.table("products").select("*").eq("chat_id", str(chat_id)).execute()
+    return result.data
 
-def save_user_products(chat_id, products):
-    all_data = load_all_products()
-    all_data[str(chat_id)] = products
-    save_all_products(all_data)
+def add_user_product(chat_id, url, name, target_price, last_price, image):
+    supabase.table("products").insert({
+        "chat_id": str(chat_id),
+        "url": url,
+        "name": name,
+        "target_price": target_price,
+        "last_price": last_price,
+        "image": image
+    }).execute()
 
-def load_history():
-    if os.path.exists(HISTORY_FILE):
-        with open(HISTORY_FILE, "r") as f:
-            return json.load(f)
-    return {}
+def update_product_price(chat_id, url, new_price):
+    supabase.table("products").update({"last_price": new_price}).eq("chat_id", str(chat_id)).eq("url", url).execute()
 
-def save_history(history):
-    with open(HISTORY_FILE, "w") as f:
-        json.dump(history, f, indent=2, ensure_ascii=False)
+def delete_user_product(chat_id, url):
+    supabase.table("products").delete().eq("chat_id", str(chat_id)).eq("url", url).execute()
 
-def add_price_history(chat_id, product_url, price):
-    history = load_history()
-    key = f"{chat_id}_{product_url}"
-    if key not in history:
-        history[key] = []
-    history[key].append({
+def delete_all_products(chat_id):
+    supabase.table("products").delete().eq("chat_id", str(chat_id)).execute()
+
+def add_price_history(chat_id, url, price):
+    supabase.table("price_history").insert({
+        "chat_id": str(chat_id),
+        "url": url,
         "price": price,
         "date": datetime.now().strftime("%Y-%m-%d %H:%M")
-    })
-    save_history(history)
+    }).execute()
 
-def get_price_history(chat_id, product_url):
-    history = load_history()
-    key = f"{chat_id}_{product_url}"
-    return history.get(key, [])
+def get_price_history(chat_id, url):
+    result = supabase.table("price_history").select("*").eq("chat_id", str(chat_id)).eq("url", url).execute()
+    return result.data
 
 st.title("📊 Price Tracker")
 st.markdown("Track product prices from Trendyol and Amazon. Get Telegram notifications when prices drop.")
@@ -108,14 +100,7 @@ with st.sidebar:
                 else:
                     with st.spinner("Adding product..."):
                         result = get_price(url)
-                        user_products.append({
-                            "url": url,
-                            "name": name,
-                            "target_price": target_price,
-                            "last_price": result["price"],
-                            "image": result["image"]
-                        })
-                        save_user_products(chat_id, user_products)
+                        add_user_product(chat_id, url, name, target_price, result["price"], result["image"])
                         add_price_history(chat_id, url, result["price"])
                         send_telegram(
                             chat_id,
@@ -128,7 +113,7 @@ with st.sidebar:
                 st.warning("Please fill in URL and product name.")
         
         if st.button("🗑️ Clear All", use_container_width=True):
-            save_user_products(chat_id, [])
+            delete_all_products(chat_id)
             st.rerun()
 
 if not chat_id:
@@ -170,13 +155,9 @@ else:
                                 f"🔗 {product['url']}"
                             )
                         
-                        product["last_price"] = current_price
-                        if result["image"]:
-                            product["image"] = result["image"]
-                        
+                        update_product_price(chat_id, product["url"], current_price)
                         add_price_history(chat_id, product["url"], current_price)
                 
-                save_user_products(chat_id, user_products)
             st.success("✅ All prices updated!")
             st.rerun()
         
@@ -207,15 +188,13 @@ else:
                         st.metric("Target Price", f"{target} TL", delta=f"-{diff:.0f} TL to go")
             with col5:
                 if st.button("🗑️", key=f"del_{i}"):
-                    user_products.pop(i)
-                    save_user_products(chat_id, user_products)
+                    delete_user_product(chat_id, product["url"])
                     st.rerun()
             
-            # Fiyat grafiği
             history = get_price_history(chat_id, product["url"])
             if len(history) >= 2:
                 df = pd.DataFrame(history)
-                fig = px.line(df, x="date", y="price", 
+                fig = px.line(df, x="date", y="price",
                             title=f"📈 {product['name']} Price History",
                             labels={"date": "Date", "price": "Price (TL)"})
                 fig.update_layout(height=250, margin=dict(l=0, r=0, t=40, b=0))

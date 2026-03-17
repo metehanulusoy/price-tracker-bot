@@ -9,3 +9,4 @@ playwright
 streamlit
 plotly
 pandas
+supabase
